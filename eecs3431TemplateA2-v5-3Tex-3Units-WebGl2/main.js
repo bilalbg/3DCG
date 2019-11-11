@@ -75,6 +75,66 @@ image2[4*texSize*i+4*j+k] = 255*image1[i][j][k];
 var textureArray = [] ;
 
 
+// A simple camera controller which uses an HTML element as the event
+// source for constructing a view matrix. Assign an "onchange"
+// function to the controller as follows to receive the updated X and
+// Y angles for the camera:
+//
+//   var controller = new CameraController(canvas);
+//   controller.onchange = function(xRot, yRot) { ... };
+//
+// The view matrix is computed elsewhere.
+function CameraController(element) {
+    var controller = this;
+    this.onchange = null;
+    this.xRot = 0;
+    this.yRot = 0;
+    this.scaleFactor = 3.0;
+    this.dragging = false;
+    this.curX = 0;
+    this.curY = 0;
+    
+    // Assign a mouse down handler to the HTML element.
+    element.onmousedown = function(ev) {
+        controller.dragging = true;
+        controller.curX = ev.clientX;
+        controller.curY = ev.clientY;
+    };
+    
+    // Assign a mouse up handler to the HTML element.
+    element.onmouseup = function(ev) {
+        controller.dragging = false;
+    };
+    
+    // Assign a mouse move handler to the HTML element.
+    element.onmousemove = function(ev) {
+        if (controller.dragging) {
+            // Determine how far we have moved since the last mouse move
+            // event.
+            var curX = ev.clientX;
+            var curY = ev.clientY;
+            var deltaX = (controller.curX - curX) / controller.scaleFactor;
+            var deltaY = (controller.curY - curY) / controller.scaleFactor;
+            controller.curX = curX;
+            controller.curY = curY;
+            // Update the X and Y rotation angles based on the mouse motion.
+            controller.yRot = (controller.yRot + deltaX) % 360;
+            controller.xRot = (controller.xRot + deltaY);
+            // Clamp the X rotation to prevent the camera from going upside
+            // down.
+            if (controller.xRot < -90) {
+                controller.xRot = -90;
+            } else if (controller.xRot > 90) {
+                controller.xRot = 90;
+            }
+            // Send the onchange event to any listener.
+            if (controller.onchange != null) {
+                controller.onchange(controller.xRot, controller.yRot);
+            }
+        }
+    };
+}
+
 
 function isLoaded(im) {
     if (im.complete) {
@@ -98,6 +158,67 @@ function loadFileTexture(tex, filename)
     // after the program continues to the next functions. OUCH!
 }
 
+function loadImageTexture(tex, image) {
+    tex.textureWebGL  = gl.createTexture();
+    tex.image = new Image();
+    tex.image.src = "" ; // Important to be empty
+    
+    gl.bindTexture( gl.TEXTURE_2D, tex.textureWebGL );
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, texSize, texSize, 0,
+                  gl.RGBA, gl.UNSIGNED_BYTE, image);
+	
+    gl.texParameteri( gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER,
+                     gl.NEAREST );
+    gl.texParameteri( gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST );
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); //Prevents s-coordinate wrapping (repeating)
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE); //Prevents t-coordinate wrapping (repeating)
+    //gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT); // s-coordinate repeating
+    //gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT); // t-coordinate repeating
+    
+    gl.bindTexture(gl.TEXTURE_2D, null);
+    tex.isTextureReady = true ;
+
+}
+
+function initTextures() {
+    
+    textureArray.push({}) ;
+    loadFileTexture(textureArray[textureArray.length-1],"sunset.bmp") ;
+    
+    textureArray.push({}) ;
+    loadFileTexture(textureArray[textureArray.length-1],"cubetexture.png") ;
+    
+    textureArray.push({}) ;
+    loadFileTexture(textureArray[textureArray.length-1],"ball.jpg") ;
+    
+    textureArray.push({}) ;
+    loadFileTexture(textureArray[textureArray.length-1],"ground.jpg") ;
+    
+    textureArray.push({}) ;
+    loadImageTexture(textureArray[textureArray.length-1],image2) ;
+    
+    
+}
+
+
+function handleTextureLoaded(textureObj) {
+    gl.bindTexture(gl.TEXTURE_2D, textureObj.textureWebGL);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, textureObj.image);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); //Prevents s-coordinate wrapping (repeating)
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE); //Prevents t-coordinate wrapping (repeating)
+    //gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT); // s-coordinate repeating
+    //gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT); // t-coordinate repeating
+    gl.bindTexture(gl.TEXTURE_2D, null);
+    console.log(textureObj.image.src) ;
+    
+    textureObj.isTextureReady = true ;
+}
+
+
+/* 
 function loadImageTexture(tex, image) {
     tex.textureWebGL  = gl.createTexture();
     tex.image = new Image();
@@ -150,7 +271,7 @@ function handleTextureLoaded(textureObj) {
     console.log(textureObj.image.src) ;
     
     textureObj.isTextureReady = true ;
-}
+} */
 
 //----------------------------------------------------------------
 
@@ -171,12 +292,16 @@ function setColor(c)
     gl.uniform1f( gl.getUniformLocation(program, 
                                         "shininess"),materialShininess );
 }
-
 function toggleTextures() {
     useTextures = 1 - useTextures ;
     gl.uniform1i( gl.getUniformLocation(program,
                                          "useTextures"), useTextures );
 }
+function useTexture(t) {
+	gl.uniform1i( gl.getUniformLocation(program,
+										"useTexture"), t );
+}
+
 
 function waitForTextures1(tex) {
     setTimeout( function() {
@@ -281,6 +406,55 @@ window.onload = function init() {
             window.requestAnimFrame(render);
         }
     };
+    
+    
+    
+    
+    document.getElementById("textureToggleButton").onclick = function() {
+        toggleTextures() ;
+        window.requestAnimFrame(render);
+    };
+    
+    document.getElementById("nearestFilterButton").onclick = function() {
+		for( i = 0 ; i < textureArray.length ; i++ ) {
+			gl.bindTexture(gl.TEXTURE_2D, textureArray[i].textureWebGL);
+        	gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+        	gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST) ;
+		}
+        window.requestAnimFrame(render);
+    };
+    
+    document.getElementById("linearFilterButton").onclick = function() {
+		for( i = 0 ; i < textureArray.length ; i++ ) {
+			gl.bindTexture(gl.TEXTURE_2D, textureArray[i].textureWebGL);
+			gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+        	gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR) ;
+		}
+        window.requestAnimFrame(render);
+    };
+	
+	document.getElementById("repeatTextButton").onclick = function() {
+		for( i = 0 ; i < textureArray.length ; i++ ) {
+			gl.bindTexture(gl.TEXTURE_2D, textureArray[i].textureWebGL);
+			gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
+			gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT);
+			
+		}
+		window.requestAnimFrame(render);
+		
+	};
+	
+	document.getElementById("clampToEdgeTextButton").onclick = function() {
+		for( i = 0 ; i < textureArray.length ; i++ ) {
+			gl.bindTexture(gl.TEXTURE_2D, textureArray[i].textureWebGL);
+			gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+			gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+		}
+		window.requestAnimFrame(render);
+	};
+
+    
+    
     
     document.getElementById("textureToggleButton").onclick = function() {
         toggleTextures() ;
@@ -432,6 +606,15 @@ function render() {
     gl.bindTexture(gl.TEXTURE_2D, textureArray[2].textureWebGL);
     gl.uniform1i(gl.getUniformLocation(program, "texture3"), 2);
     
+    gl.activeTexture(gl.TEXTURE3);
+    gl.bindTexture(gl.TEXTURE_2D, textureArray[3].textureWebGL);
+    gl.uniform1i(gl.getUniformLocation(program, "texture4"), 3);
+    
+    gl.activeTexture(gl.TEXTURE4);
+    gl.bindTexture(gl.TEXTURE_2D, textureArray[4].textureWebGL);
+    gl.uniform1i(gl.getUniformLocation(program, "texture5"), 4);
+    
+    gl.uniform1f( gl.getUniformLocation(program, "time"), TIME );
     
     
     
@@ -439,6 +622,7 @@ function render() {
     
     gPush();
     {
+        useTexture(1);
         setColor(vec4(0.545,0.27, 0.07, 1.0))
         gTranslate(-1.75,-2.8,-3);
         gRotate(-90, 1, 0, 0);
@@ -485,6 +669,7 @@ function render() {
     gPush();
     {
         setColor(vec4(0.0,1.0,0.0,1.0)) ;
+        useTexture(4);
         gTranslate(3.5,-7,0);
         gScale(7.5, 1, 6);
         drawCube();
@@ -495,6 +680,7 @@ function render() {
     
     gPush();
     {
+        useTexture(1);
         setColor(vec4(0.545,0.27, 0.07, 1.0))
         gTranslate(-1,-4.5,-3);
         gScale(1/3, 1.5, 1/7);
@@ -544,8 +730,7 @@ function render() {
     //head
     gPush();
     {
-
-        gRotate(-2*Math.cos(TIME*2),0,0,1) ;
+        useTexture(2);
 
         gTranslate(0,-2.2,3);
         gRotate(90, 0, 1, 0);
@@ -564,6 +749,7 @@ function render() {
         
 
         //eye whites
+
         gTranslate(0.32, 2, -3.8);
         setColor(vec4(1,1,1,1.0)) ;
         gScale(0.2, 0.2, 0.2);
@@ -597,8 +783,12 @@ function render() {
     //arms
     gPush();
     {
+        useTexture(2);
+            gRotate(8*Math.sin(TIME*2),0,0,1) ;
+
             //upper arm
             setColor(vec4(0.5,0,0.6,1.0)) ;
+            //useTexture(1);
             gTranslate(0.4,-1,0);
             gRotate(-10,0,0,1);
             gScale(0.6, 0.15, 0.2);
@@ -625,14 +815,11 @@ function render() {
             gTranslate(-0.7,0,-1.8);
 
             gRotate(10,0,0,1);
-            gRotate(8*Math.sin(TIME*2),0,0,1) ;
-
-            //gRotate(8*Math.cos(TIME*2),0,0,1) ;
             
-            //gRotate(8*Math.sin(TIME*1.5),0,0,1) ;
+            
             //forearm
             gTranslate(1.25,-0.15,0 );
-            //gRotate(8*Math.sin(TIME*1.5),0,0,1) ;
+            gRotate(4*Math.sin(TIME*2),0,0,1) ;
             gScale(0.5, 0.15, 0.2);
             drawCube();
             gScale(1/0.5, 1/0.15, 1/0.2);
@@ -667,6 +854,7 @@ function render() {
     {   
         //gRotate(TIME*180/3.14159,0,1,0) ;
         setColor(vec4(1.0,0.0,0.0,1.0)) ;
+        useTexture(3);
         gTranslate(0,-2*Math.cos(TIME*2)+0.6*Math.PI, Math.cos(TIME)-0.95);
         gScale(0.2,0.2,0.2);
         drawSphere() ;
@@ -684,14 +872,17 @@ function render() {
     gTranslate(-2.3,1,0);
 
 
+    
+    
+    
+    //BODY
     gPush() ;
     {
-        
+        useTexture(2);
 
         gTranslate(0,-2.2,3);
         
         gRotate(90,0,1,0);
-        //BODY
     
         gTranslate(3.9,0.5,0) ;
         gScale(0.7, 1, 0.3);
@@ -751,101 +942,8 @@ function render() {
     gPop() ;
     
     
-    
-    
-    gPush() ;
-    {
-        gTranslate(3,0,0) ;
-        setColor(vec4(0.0,1.0,0.0,1.0)) ;
-        gRotate(TIME*180/3.14159,0,1,0) ;
-        //drawCube() ;
-    }
-    gPop() ;
-    
    
-    
-    
-    
-    gPush() ;
-    {
-        gTranslate(5,0,0) ;
-        setColor(vec4(0.0,1.0,1.0,1.0)) ;
-        gRotate(TIME*180/3.14159,0,1,0) ;
-       // drawCylinder() ;
-    }
-    gPop() ;
-    
-    
-    
-    gPush() ;
-    {
-        gTranslate(7,0,0) ;
-        setColor(vec4(1.0,1.0,0.0,1.0)) ;
-        gRotate(TIME*180/3.14159,0,1,0) ;
-      //  drawCone() ;
-    }
-    gPop() ;
     
     if( animFlag )
         window.requestAnimFrame(render);
-}
-
-// A simple camera controller which uses an HTML element as the event
-// source for constructing a view matrix. Assign an "onchange"
-// function to the controller as follows to receive the updated X and
-// Y angles for the camera:
-//
-//   var controller = new CameraController(canvas);
-//   controller.onchange = function(xRot, yRot) { ... };
-//
-// The view matrix is computed elsewhere.
-function CameraController(element) {
-    var controller = this;
-    this.onchange = null;
-    this.xRot = 0;
-    this.yRot = 0;
-    this.scaleFactor = 3.0;
-    this.dragging = false;
-    this.curX = 0;
-    this.curY = 0;
-    
-    // Assign a mouse down handler to the HTML element.
-    element.onmousedown = function(ev) {
-        controller.dragging = true;
-        controller.curX = ev.clientX;
-        controller.curY = ev.clientY;
-    };
-    
-    // Assign a mouse up handler to the HTML element.
-    element.onmouseup = function(ev) {
-        controller.dragging = false;
-    };
-    
-    // Assign a mouse move handler to the HTML element.
-    element.onmousemove = function(ev) {
-        if (controller.dragging) {
-            // Determine how far we have moved since the last mouse move
-            // event.
-            var curX = ev.clientX;
-            var curY = ev.clientY;
-            var deltaX = (controller.curX - curX) / controller.scaleFactor;
-            var deltaY = (controller.curY - curY) / controller.scaleFactor;
-            controller.curX = curX;
-            controller.curY = curY;
-            // Update the X and Y rotation angles based on the mouse motion.
-            controller.yRot = (controller.yRot + deltaX) % 360;
-            controller.xRot = (controller.xRot + deltaY);
-            // Clamp the X rotation to prevent the camera from going upside
-            // down.
-            if (controller.xRot < -90) {
-                controller.xRot = -90;
-            } else if (controller.xRot > 90) {
-                controller.xRot = 90;
-            }
-            // Send the onchange event to any listener.
-            if (controller.onchange != null) {
-                controller.onchange(controller.xRot, controller.yRot);
-            }
-        }
-    };
 }
